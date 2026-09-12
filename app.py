@@ -10,11 +10,18 @@ st.set_page_config(page_title="VibeMatch | Movies & Songs", page_icon="✨", lay
 st.markdown("<h2 style='text-align: center;'>✨ VibeMatch</h2>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: gray;'>Pick your vibe, get instant movies or songs with direct listen/watch links.</p>", unsafe_allow_html=True)
 
-# 2. API Key Retrieval
-api_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
-if not api_key:
-    api_key = "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"
+# 2. Safe API Key Retrieval (No StreamlitSecretNotFoundError)
+api_key = None
+try:
+    if "GROQ_API_KEY" in st.secrets:
+        api_key = st.secrets["GROQ_API_KEY"]
+except Exception:
+    pass
 
+if not api_key:
+    api_key = os.environ.get("GROQ_API_KEY") or "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"
+
+# Initialize Client
 client = Groq(api_key=api_key)
 
 # 3. UI Inputs
@@ -54,17 +61,16 @@ if find_btn:
         try:
             is_movie = "Movies" in category
 
-            # Force strict JSON output so we can reliably generate URLs
             if is_movie:
                 system_prompt = (
                     "You are a movie recommendation assistant. "
-                    "Return ONLY a valid JSON array containing exactly 3 items. No markdown wrapper, no extra text. "
+                    "Return ONLY a valid JSON array containing exactly 3 items. No markdown wrapper, no extra conversational text. "
                     "Schema: [{\"title\": \"Movie Title\", \"year\": \"2021\", \"genre\": \"Sci-Fi\", \"hook\": \"One line summary\", \"why\": \"Why it fits the mood\"}]"
                 )
             else:
                 system_prompt = (
                     "You are a music recommendation assistant. "
-                    "Return ONLY a valid JSON array containing exactly 3 items. No markdown wrapper, no extra text. "
+                    "Return ONLY a valid JSON array containing exactly 3 items. No markdown wrapper, no extra conversational text. "
                     "Schema: [{\"title\": \"Song Title\", \"artist\": \"Artist Name\", \"genre\": \"Indie Pop\", \"hook\": \"Highlight of the track\", \"why\": \"Why it fits the mood\"}]"
                 )
 
@@ -77,14 +83,15 @@ if find_btn:
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.6,
-                max_tokens=500
+                max_tokens=450
             )
 
             raw_text = response.choices[0].message.content.strip()
 
-            # Clean potential markdown backticks if model includes them
-            if raw_text.startswith("```"):
-                raw_text = raw_text.split("```")[1]
+            # Clean markdown code blocks if the model outputs them
+            if "```" in raw_text:
+                parts = raw_text.split("```")
+                raw_text = parts[1]
                 if raw_text.startswith("json"):
                     raw_text = raw_text[4:]
             raw_text = raw_text.strip()
