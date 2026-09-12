@@ -1,7 +1,6 @@
 import os
 import streamlit as st
-from google import genai
-from google.genai import errors
+from groq import Groq
 
 # Page Configuration
 st.set_page_config(
@@ -10,7 +9,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# Dark Theme
+# Dark Theme UI Styling
 st.markdown("""
 <style>
     .stApp {
@@ -59,21 +58,31 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# API Setup
-os.environ["GEMINI_API_KEY"] = "AQ.Ab8RN6Ir1Rj7ddnAU0UYwmc7j5TTuydjaDRSvKortMrBgMHR_Q"
-client = genai.Client()
+# Safe API Key Loading (Local + Streamlit Cloud)
+api_key = os.environ.get("GROQ_API_KEY")
 
-# Header
+if not api_key:
+    try:
+        api_key = st.secrets.get("GROQ_API_KEY")
+    except Exception:
+        api_key = None
+
+if not api_key:
+    api_key = "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"
+
+client = Groq(api_key=api_key)
+
+# Header Section
 st.title("CineTrend & Melodies")
 st.caption("AI-Powered Discovery for Bollywood Tracks & Cinema")
 
-# Initialize states
+# Session State for Mood Pills
 if "search_query" not in st.session_state:
     st.session_state.search_query = ""
 if "trigger_search" not in st.session_state:
     st.session_state.trigger_search = False
 
-# Pills definition
+# Quick Pick Pills
 st.markdown("<p style='color:#94a3b8; font-size:13px; font-weight:600; text-transform:uppercase; margin-bottom:8px;'>Quick Picks</p>", unsafe_allow_html=True)
 pills = [
     ("🌙 Late Night Lofi", "Late Night Lofi Bollywood"),
@@ -90,7 +99,7 @@ for idx, (label, val) in enumerate(pills):
         st.session_state.trigger_search = True
         st.rerun()
 
-# Search box
+# Search Box
 user_input = st.text_input(
     "Search any artist, vibe, or movie plot:",
     value=st.session_state.search_query,
@@ -110,7 +119,7 @@ with col_cat:
 with col_count:
     num_items = st.slider("Results", min_value=2, max_value=5, value=3)
 
-# Search click or pill trigger
+# Search Execution
 search_clicked = st.button("Search ✨", type="primary", use_container_width=True)
 
 if search_clicked or st.session_state.trigger_search:
@@ -127,7 +136,7 @@ if search_clicked or st.session_state.trigger_search:
             Count: {num_items}
 
             GUIDELINES:
-            1. TYPO HANDLING: Correct typos automatically (e.g., 'arjti' -> 'Arijit Singh').
+            1. TYPO HANDLING: Correct typos automatically (e.g. 'arjti' -> 'Arijit Singh').
             2. RELEVANCE CHECK: If input is gibberish, say: '⚠️ No match found. Try an artist name like KK or a vibe like Retro.'
             3. FOR SONGS:
                - **Title** (Movie/Album, Year)
@@ -138,28 +147,22 @@ if search_clicked or st.session_state.trigger_search:
                - **Title** (Year) • Genre
                - **Why Watch**: 1 crisp sentence
                - **Streaming**: Netflix / Prime / JioCinema / Hotstar
-            Keep formatting clean. No conversational intros.
+            Keep formatting clean with bullet points and bold headers. No conversational opening or closing text.
             """
 
-            # Fallback mechanism for 503 High Demand errors
-            models_to_try = ["gemini-2.5-flash", "gemini-3.6-flash", "gemini-2.5-pro"]
-            response_text = None
-            
-            for m in models_to_try:
-                try:
-                    res = client.models.generate_content(
-                        model=m,
-                        contents=prompt
-                    )
-                    response_text = res.text
-                    break
-                except errors.ServerError:
-                    continue
-                except Exception:
-                    continue
-
-            if response_text:
+            try:
+                chat_completion = client.chat.completions.create(
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": prompt,
+                        }
+                    ],
+                    model="qwen/qwen3.8-27b",
+                )
+                
+                result = chat_completion.choices[0].message.content
                 st.markdown("---")
-                st.markdown(response_text)
-            else:
-                st.error("Google AI servers are facing heavy load right now. Please press Search again in 10-15 seconds!")
+                st.markdown(result)
+            except Exception as e:
+                st.error(f"Error: {e}")
