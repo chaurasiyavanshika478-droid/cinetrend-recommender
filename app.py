@@ -1,108 +1,126 @@
+import json
 import os
+import urllib.parse
 import streamlit as st
 from groq import Groq
 
-# Page Setup
-st.set_page_config(
-    page_title="Cinetrend | AI Movie Recommender",
-    page_icon="🎬",
-    layout="centered"
-)
+# 1. Page Configuration
+st.set_page_config(page_title="VibeMatch | Movies & Songs", page_icon="✨", layout="centered")
 
-# Custom Styling for polished look
-st.markdown("""
-<style>
-    .main-title {
-        font-size: 2.3rem;
-        font-weight: 700;
-        text-align: center;
-        margin-bottom: 0.2rem;
-    }
-    .sub-title {
-        text-align: center;
-        color: #888888;
-        font-size: 1rem;
-        margin-bottom: 2rem;
-    }
-    .stButton>button {
-        width: 100%;
-        border-radius: 8px;
-        height: 3em;
-        font-weight: 600;
-    }
-</style>
-""", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center;'>✨ VibeMatch</h2>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: gray;'>Pick your vibe, get instant movies or songs with direct listen/watch links.</p>", unsafe_allow_html=True)
 
-st.markdown('<div class="main-title">🎬 Cinetrend Recommender</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">Discover your next favorite movie powered by high-speed Groq AI</div>', unsafe_allow_html=True)
-
-# API Key Retrieval (Prioritizes Secrets -> Fallback)
-api_key = None
-if "GROQ_API_KEY" in st.secrets:
-    api_key = st.secrets["GROQ_API_KEY"]
-elif os.environ.get("GROQ_API_KEY"):
-    api_key = os.environ.get("GROQ_API_KEY")
-else:
+# 2. API Key Retrieval
+api_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
+if not api_key:
     api_key = "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"
 
 client = Groq(api_key=api_key)
 
-# Input UI
-with st.container():
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        user_query = st.text_input(
-            "Favorite movie, vibe, or plot idea:",
-            placeholder="e.g., Mind-bending sci-fi like Interstellar or Dark",
-            help="Type anything you want: genre, actors, plot twists, or emotional vibe."
-        )
-    with col2:
-        mood = st.selectbox(
-            "Current Mood:",
-            ["Any Mood", "Mind-bending & Mystery", "Cozy & Feel-Good", "Thrilling & Edge-of-Seat", "Dark & Gritty", "Heartfelt & Emotional"]
-        )
+# 3. UI Inputs
+category = st.radio(
+    "What do you want to explore?",
+    options=["🎬 Movies", "🎵 Songs"],
+    horizontal=True
+)
 
-    recommend_button = st.button("✨ Get Recommendations", type="primary")
+col1, col2 = st.columns([2, 1])
 
-# Recommendation Execution
-if recommend_button:
-    if not user_query.strip():
-        st.warning("Please enter a movie title, theme, or plot vibe first!")
-    else:
-        with st.spinner("Analyzing cinema trends & curation..."):
-            try:
+with col1:
+    user_input = st.text_input(
+        "Any specific tastes? (Optional)",
+        placeholder="e.g. Arijit Singh vibe, sci-fi thriller, 90s rock..."
+    )
+
+with col2:
+    vibe = st.selectbox(
+        "Mood / Vibe:",
+        [
+            "🌧️ Rainy Day",
+            "💔 Sad & Emotional",
+            "🌙 Late Night Chill",
+            "☕ Cozy & Warm",
+            "❤️ Romantic",
+            "⚡ Hype & Party",
+            "🧘 Calm & Relax"
+        ]
+    )
+
+find_btn = st.button("✨ Get Recommendations", type="primary", use_container_width=True)
+
+# 4. Recommendation Generation with Dynamic Links
+if find_btn:
+    with st.spinner("Curating your picks..."):
+        try:
+            is_movie = "Movies" in category
+
+            # Force strict JSON output so we can reliably generate URLs
+            if is_movie:
                 system_prompt = (
-                    "You are a world-class film critic and personalized cinema recommender. "
-                    "Recommend exactly 3 to 4 perfectly matched movies. "
-                    "For each movie, strictly provide: "
-                    "1. Title (Release Year) with Genre "
-                    "2. One-sentence Logline/Hook "
-                    "3. Why it matches the user's taste "
-                    "Keep tone sharp, engaging, and formatting concise. Do not exceed 500 words."
+                    "You are a movie recommendation assistant. "
+                    "Return ONLY a valid JSON array containing exactly 3 items. No markdown wrapper, no extra text. "
+                    "Schema: [{\"title\": \"Movie Title\", \"year\": \"2021\", \"genre\": \"Sci-Fi\", \"hook\": \"One line summary\", \"why\": \"Why it fits the mood\"}]"
+                )
+            else:
+                system_prompt = (
+                    "You are a music recommendation assistant. "
+                    "Return ONLY a valid JSON array containing exactly 3 items. No markdown wrapper, no extra text. "
+                    "Schema: [{\"title\": \"Song Title\", \"artist\": \"Artist Name\", \"genre\": \"Indie Pop\", \"hook\": \"Highlight of the track\", \"why\": \"Why it fits the mood\"}]"
                 )
 
-                user_prompt = f"User preference: '{user_query}'. Mood: '{mood}'."
+            user_prompt = f"Category: {category}\nVibe: {vibe}\nUser Preferences: {user_input if user_input else 'None'}"
 
-                # Active production model + safe token cap (Prevents 404 & 429)
-                response = client.chat.completions.create(
-                    model="qwen/qwen3.8-27b",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    max_tokens=450,
-                    temperature=0.6,
-                )
+            response = client.chat.completions.create(
+                model="qwen/qwen3.8-27b",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.6,
+                max_tokens=500
+            )
 
-                st.success("Here are your curated recommendations:")
-                st.markdown(response.choices[0].message.content)
+            raw_text = response.choices[0].message.content.strip()
 
-            except Exception as e:
-                error_text = str(e)
-                if "429" in error_text:
-                    st.error("Traffic is high right now. Please wait 10-15 seconds and click again!")
+            # Clean potential markdown backticks if model includes them
+            if raw_text.startswith("```"):
+                raw_text = raw_text.split("```")[1]
+                if raw_text.startswith("json"):
+                    raw_text = raw_text[4:]
+            raw_text = raw_text.strip()
+
+            items = json.loads(raw_text)
+
+            st.markdown("---")
+
+            # Render Cards with Direct Links
+            for item in items:
+                if is_movie:
+                    title_line = f"🎬 **{item.get('title')}** ({item.get('year')}) — *{item.get('genre')}*"
+                    search_query = f"{item.get('title')} {item.get('year')} trailer"
+                    encoded_query = urllib.parse.quote_plus(search_query)
+
+                    yt_link = f"https://www.youtube.com/results?search_query={encoded_query}"
+                    google_link = f"https://www.google.com/search?q={urllib.parse.quote_plus(item.get('title') + ' movie where to watch')}"
+
+                    st.markdown(title_line)
+                    st.write(f"**Story:** {item.get('hook')}")
+                    st.write(f"**Vibe Match:** {item.get('why')}")
+                    st.markdown(f"[▶️ Watch Trailer on YouTube]({yt_link}) &nbsp;|&nbsp; [🍿 Where to Stream]({google_link})")
                 else:
-                    st.error(f"Error generating recommendations: {error_text}")
+                    title_line = f"🎵 **{item.get('title')}** by *{item.get('artist')}* — *{item.get('genre')}*"
+                    search_query = f"{item.get('title')} {item.get('artist')}"
+                    encoded_query = urllib.parse.quote_plus(search_query)
 
-st.divider()
-st.caption("Built with Streamlit & Groq Cloud Engine | Cinetrend")
+                    spotify_link = f"https://open.spotify.com/search/{encoded_query}"
+                    yt_link = f"https://www.youtube.com/results?search_query={encoded_query}"
+
+                    st.markdown(title_line)
+                    st.write(f"**Vibe:** {item.get('hook')}")
+                    st.write(f"**Why it fits:** {item.get('why')}")
+                    st.markdown(f"[🟢 Play on Spotify]({spotify_link}) &nbsp;|&nbsp; [▶️ Play on YouTube]({yt_link})")
+
+                st.divider()
+
+        except Exception as e:
+            st.error(f"Could not load formatted links: {e}")
