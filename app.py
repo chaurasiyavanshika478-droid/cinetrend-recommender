@@ -83,14 +83,14 @@ if recommend_button:
 
                 user_prompt = f"User preference: '{user_query}'. Mood: '{mood}'."
 
-                # High-throughput model + safety token cap
+                # Active production model + safe token cap (Prevents 404 & 429)
                 response = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
+                    model="qwen/qwen3.8-27b",
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt}
                     ],
-                    max_tokens=650,
+                    max_tokens=450,
                     temperature=0.6,
                 )
 
